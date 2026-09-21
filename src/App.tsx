@@ -1,128 +1,130 @@
+import { useEffect, useState } from "react";
 import "./styles.css";
+import { StoreProvider, useStore } from "./store/store";
+import { ToastProvider } from "./ui/widgets";
+import { Overview } from "./ui/Overview";
+import { Legs } from "./ui/Legs";
+import { Ranking } from "./ui/Ranking";
+import { Disputes } from "./ui/Disputes";
+import { Timeline } from "./ui/Timeline";
+import { Params } from "./ui/Params";
+import { Versions } from "./ui/Versions";
+import { useDerived } from "./store/useDerived";
+import { resolveReviews } from "./domain/model";
 
-const project = {
-  "sourceNo": 9,
-  "id": "hxyfront-62014",
-  "port": 62014,
-  "title": "赛鸽训放记录",
-  "domain": "赛鸽训放",
-  "prompt": "我想做一个面向赛鸽棚的训放记录前端工具，鸽主可以记录足环号、血统、训放地点、放飞距离、天气、归巢时间、飞行速度、健康状态和配对记录。页面需要有鸽棚总览、训放成绩排行、未归巢提醒、单羽赛鸽档案和按血统筛选的历史成绩。",
-  "palette": [
-    "#1d4ed8",
-    "#64748b",
-    "#f97316"
-  ],
-  "metrics": [
-    "归巢率",
-    "平均速度",
-    "未归巢",
-    "血统档案"
-  ],
-  "filters": [
-    "短距离",
-    "中距离",
-    "长距离",
-    "种鸽"
-  ],
-  "fields": [
-    "足环号",
-    "血统",
-    "训放地点",
-    "放飞距离",
-    "归巢时间",
-    "健康状态"
-  ],
-  "records": [
-    [
-      "CHN-24-001839",
-      "詹森系",
-      "80km，晴",
-      "均速1180m/min"
-    ],
-    [
-      "CHN-24-002114",
-      "凡龙系",
-      "120km，侧风",
-      "归巢延迟"
-    ],
-    [
-      "CHN-23-008771",
-      "种鸽",
-      "配对记录更新",
-      "健康正常"
-    ]
-  ]
-};
+type TabId = "overview" | "legs" | "ranking" | "disputes" | "timeline" | "params" | "versions";
 
-function App() {
+const TABS: { id: TabId; label: string }[] = [
+  { id: "overview", label: "鸽棚总览" },
+  { id: "legs", label: "赛程复测台" },
+  { id: "ranking", label: "成绩排行" },
+  { id: "disputes", label: "争议复核" },
+  { id: "timeline", label: "航迹时间轴" },
+  { id: "params", label: "判定参数档案" },
+  { id: "versions", label: "版本存档" },
+];
+
+function Shell() {
+  const { state } = useStore();
+  const d = useDerived();
+  const [tab, setTab] = useState<TabId>("overview");
+  const [focusLegId, setFocusLegId] = useState<string | undefined>();
+  const [flash, setFlash] = useState(false);
+
+  // 参数版本变化 → “排行/风险/配对失效重算”闪动提示
+  const version = state.version;
+  useEffect(() => {
+    setFlash(true);
+    const t = window.setTimeout(() => setFlash(false), 1400);
+    return () => window.clearTimeout(t);
+  }, [version]);
+
+  const disputeCount = d.analyses.filter(
+    (a) =>
+      a.status === "disputed" &&
+      resolveReviews(a.leg.id, state.reviews, a.issueSignature, d.reviewerIds)
+        .frozen
+  ).length;
+
+  function go(next: string, legId?: string) {
+    setTab(next as TabId);
+    if (legId) setFocusLegId(legId);
+  }
+
   return (
-    <main className="app">
-      <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
-      </section>
-
-      <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[28, 6, 14, 91][index] ?? 10}</strong>
-          </article>
-        ))}
-      </section>
-
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}分类</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
+    <main className="app app-recheck">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">鸽</div>
           <div>
-            <p>近期记录</p>
-            <h2>工作台摘要</h2>
+            <h1>离线航迹可信度复测台</h1>
+            <p>赛鸽训放 · 多段鸽钟报时 · 连续可信段排行 · 双人复核解冻</p>
           </div>
-          <button>导出CSV</button>
         </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+        <div className="topbar-side">
+          <span className={`version-tag ${flash ? "version-flash" : ""}`}>
+            档案 v{state.version}
+          </span>
+          <span className="offline-tag" title="全部数据仅保存在本机浏览器">
+            ● 离线模式
+          </span>
         </div>
-      </section>
+      </header>
+
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`tab ${tab === t.id ? "tab-active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {t.id === "disputes" && disputeCount > 0 && (
+              <span className="tab-dot">{disputeCount}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {flash && (
+        <div className="recalc-banner">
+          判定参数已变更：排行、风险等级与配对提示已失效并重算；上一版已只读冻结。
+        </div>
+      )}
+
+      <div className="tab-body">
+        {tab === "overview" && <Overview onGo={go} />}
+        {tab === "legs" && (
+          <Legs focusLegId={focusLegId} clearFocus={() => setFocusLegId(undefined)} />
+        )}
+        {tab === "ranking" && (
+          <Ranking
+            onOpenLeg={(id) => {
+              setFocusLegId(id);
+              setTab("legs");
+            }}
+          />
+        )}
+        {tab === "disputes" && <Disputes />}
+        {tab === "timeline" && <Timeline />}
+        {tab === "params" && <Params />}
+        {tab === "versions" && <Versions />}
+      </div>
+
+      <footer className="footer">
+        数据仅存于本机 localStorage：赛程 / 争议队列 / 时间轴由同一档案实时派生，
+        刷新页面后保持一致；参数发布前的旧版快照只读保留
+      </footer>
     </main>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <StoreProvider>
+      <ToastProvider>
+        <Shell />
+      </ToastProvider>
+    </StoreProvider>
+  );
+}
